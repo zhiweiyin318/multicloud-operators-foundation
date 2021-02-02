@@ -3,7 +3,9 @@
 package app
 
 import (
+	"github.com/open-cluster-management/multicloud-operators-foundation/pkg/controllers/clusterrole"
 	"io/ioutil"
+	"net/http/pprof"
 	"path"
 
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
@@ -15,7 +17,6 @@ import (
 	"github.com/open-cluster-management/multicloud-operators-foundation/pkg/controllers/autodetect"
 	"github.com/open-cluster-management/multicloud-operators-foundation/pkg/controllers/clusterinfo"
 	"github.com/open-cluster-management/multicloud-operators-foundation/pkg/controllers/clusterrbac"
-	"github.com/open-cluster-management/multicloud-operators-foundation/pkg/controllers/clusterrole"
 	"github.com/open-cluster-management/multicloud-operators-foundation/pkg/controllers/clusterset/clusterrolebinding"
 	"github.com/open-cluster-management/multicloud-operators-foundation/pkg/controllers/clusterset/clustersetmapper"
 	"github.com/open-cluster-management/multicloud-operators-foundation/pkg/controllers/clusterset/syncclusterrolebinding"
@@ -81,6 +82,11 @@ func Run(o *options.ControllerRunOptions, stopCh <-chan struct{}) error {
 	})
 	if err != nil {
 		klog.Errorf("unable to start manager: %v", err)
+		return err
+	}
+
+	if err := mgr.AddMetricsExtraHandler("/heap", pprof.Handler("heap")); err != nil {
+		klog.Errorf("unable to add readyz check handler: %v", err)
 		return err
 	}
 

@@ -79,10 +79,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to secondary resource Secrets and requeue the owner BareMetalAsset
-	err = c.Watch(&source.Kind{Type: &corev1.Secret{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &inventoryv1alpha1.BareMetalAsset{},
-	})
+	// err = c.Watch(&source.Kind{Type: &corev1.Secret{}}, &handler.EnqueueRequestForOwner{
+	// 	IsController: true,
+	// 	OwnerType:    &inventoryv1alpha1.BareMetalAsset{},
+	// })
 	if err != nil {
 		return err
 	}
