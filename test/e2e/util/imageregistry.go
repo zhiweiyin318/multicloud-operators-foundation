@@ -1,32 +1,30 @@
 package util
 
 import (
+	"fmt"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 )
 
-const imageRegistryTemplate = `{
-  "apiVersion": "cluster.open-cluster-management.io/v1alpha1",
-  "kind": "ManagedClusterImageRegistry",
-  "metadata": {
- 	"labels": {
-	  "test-automation": "true"
+const ImageRegistryTemplate = `{
+    "apiVersion": "cluster.open-cluster-management.io/v1alpha1",
+    "kind": "ManagedClusterImageRegistry",
+    "metadata": {
+        "name": "yzw",
+        "namespace": "default"
     },
-    "namespace": "cluster1"
-	"name": "registry1"
-  },
-  "spec": {
-    "registry": "quay.io/yzw",
-    "pullSecret" {
-      "name": "pullSecret"
-    },
-    "placementRef": {
-      "group": "cluster.open-cluster-management.io",
-      "resource": "placements",
-      "name": "placement"
+    "spec": {
+        "placementRef": {
+            "group": "cluster.open-cluster-management.io",
+            "name": "yzw",
+            "resource": "placements"
+        },
+        "pullSecret": {
+            "name": "pullSecret"
+        },
+        "registry": "quay.io/yzw"
     }
-  }
 }`
 
 var imageRegistryGVR = schema.GroupVersionResource{
@@ -36,7 +34,7 @@ var imageRegistryGVR = schema.GroupVersionResource{
 }
 
 func CreateImageRegistry(dynamicClient dynamic.Interface, namespace, name, placement string) error {
-	obj, err := LoadResourceFromJSON(imageRegistryTemplate)
+	obj, err := LoadResourceFromJSON(ImageRegistryTemplate)
 	if err != nil {
 		return err
 	}
@@ -53,6 +51,7 @@ func CreateImageRegistry(dynamicClient dynamic.Interface, namespace, name, place
 		return err
 	}
 
+	fmt.Println("image registry ", obj)
 	_, err = CreateResource(dynamicClient, imageRegistryGVR, obj)
 	return err
 }
