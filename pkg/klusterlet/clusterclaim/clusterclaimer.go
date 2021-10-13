@@ -63,6 +63,8 @@ const (
 	ProductIKS       = "IKS"
 	ProductOpenShift = "OpenShift"
 	ProductOSD       = "OpenShiftDedicated"
+	ProductROSA      = "ROSA"
+	ProductARO       = "ARO"
 	// ProductOther other (unable to auto detect)
 	ProductOther = "Other"
 )
@@ -197,6 +199,42 @@ func (c *ClusterClaimer) isOpenshiftDedicated() bool {
 		}
 	}
 	return hasProject && hasManaged
+}
+
+func (c *ClusterClaimer) isROSA() bool {
+	if !c.isOpenShift() {
+		return false
+	}
+
+	_, err := c.KubeClient.CoreV1().ConfigMaps("openshift-config").Get(context.TODO(), "rosa-brand-logo", metav1.GetOptions{})
+	if err != nil && apierrors.IsNotFound(err) {
+		return false
+	}
+	if err != nil {
+		klog.Errorf("failed to get configmap openshift-config/rosa-brand-logo. err: %v", err)
+		return false
+	}
+
+	return true
+}
+
+func (c *ClusterClaimer) isARO() bool {
+	if !c.isOpenShift() {
+		return false
+	}
+
+	serverGroups, err := c.KubeClient.Discovery().ServerGroups()
+	if err != nil {
+		klog.Errorf("failed to get server group %v", err)
+		return false
+	}
+	for _, apiGroup := range serverGroups.Groups {
+		if apiGroup.Name == "aro.openshift.io" {
+			return true
+		}
+	}
+
+	return false
 }
 
 const (
@@ -389,6 +427,14 @@ func (c *ClusterClaimer) getKubeVersionPlatformProduct() (kubeVersion, platform,
 	case strings.Contains(gitVersion, ProductGKE):
 		platform = PlatformGCP
 		product = ProductGKE
+		return
+	case c.isROSA():
+		platform = PlatformAWS
+		product = ProductROSA
+		return
+	case c.isARO():
+		platform = PlatformAzure
+		product = ProductARO
 		return
 	case c.isOpenshiftDedicated():
 		product = ProductOSD

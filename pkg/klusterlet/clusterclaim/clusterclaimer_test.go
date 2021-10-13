@@ -183,6 +183,19 @@ func managedAPIResource() *metav1.APIResourceList {
 	}
 }
 
+func aroAPIResource() *metav1.APIResourceList {
+	aro := metav1.APIResource{
+		Name:         "cluster",
+		SingularName: "clusters",
+		Namespaced:   false,
+		Kind:         "Cluster",
+	}
+	return &metav1.APIResourceList{
+		GroupVersion: "aro.openshift.io/v1alpha1",
+		APIResources: []metav1.APIResource{aro},
+	}
+}
+
 func newFakeKubeClient(resources []*metav1.APIResourceList, objects []runtime.Object) kubernetes.Interface {
 	fakeKubeClient := kubefake.NewSimpleClientset(objects...)
 	fakeKubeClient.Resources = append(fakeKubeClient.Resources, resources...)
@@ -260,6 +273,15 @@ func newNode(platform string) *corev1.Node {
 		node.Status.NodeInfo.Architecture = "ppc64le"
 	}
 	return node
+}
+
+func newConfigmap(namespace, name string) *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+	}
 }
 
 func fakeHubClient(clusterName string, labels map[string]string) client.Client {
@@ -421,6 +443,61 @@ func TestOpenshiftDedicated(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			clusterClaimer := ClusterClaimer{KubeClient: test.kubeClient}
 			rst := clusterClaimer.isOpenshiftDedicated()
+			assert.Equal(t, test.expectRet, rst)
+		})
+	}
+}
+
+func TestROSA(t *testing.T) {
+	tests := []struct {
+		name       string
+		kubeClient kubernetes.Interface
+		expectRet  bool
+	}{
+		{
+			name: "is ROSA",
+			kubeClient: newFakeKubeClient([]*metav1.APIResourceList{projectAPIResource(), managedAPIResource()},
+				[]runtime.Object{newConfigmap("openshift-config", "rosa-brand-logo")}),
+			expectRet: true,
+		},
+		{
+			name:       "is openshift not ROSA",
+			kubeClient: newFakeKubeClient([]*metav1.APIResourceList{projectAPIResource()}, nil),
+			expectRet:  false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			clusterClaimer := ClusterClaimer{KubeClient: test.kubeClient}
+			rst := clusterClaimer.isROSA()
+			assert.Equal(t, test.expectRet, rst)
+		})
+	}
+}
+
+func TestARO(t *testing.T) {
+	tests := []struct {
+		name       string
+		kubeClient kubernetes.Interface
+		expectRet  bool
+	}{
+		{
+			name:       "is ARO",
+			kubeClient: newFakeKubeClient([]*metav1.APIResourceList{projectAPIResource(), aroAPIResource()}, nil),
+			expectRet:  true,
+		},
+		{
+			name:       "is openshift not ARO",
+			kubeClient: newFakeKubeClient([]*metav1.APIResourceList{projectAPIResource()}, nil),
+			expectRet:  false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			clusterClaimer := ClusterClaimer{KubeClient: test.kubeClient}
+			rst := clusterClaimer.isARO()
 			assert.Equal(t, test.expectRet, rst)
 		})
 	}
