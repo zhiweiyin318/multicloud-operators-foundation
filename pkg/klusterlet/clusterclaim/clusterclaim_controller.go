@@ -285,6 +285,9 @@ func createOrUpdateClusterClaim(ctx context.Context, clusterClient clusterclient
 	oldClaim, err := clusterClient.ClusterV1alpha1().ClusterClaims().Get(ctx, newClaim.Name, metav1.GetOptions{})
 	switch {
 	case errors.IsNotFound(err):
+		if newClaim.Name == ClaimOpenshiftAPIServerURL {
+			klog.Infof("##### claim api server url is created")
+		}
 		_, err := clusterClient.ClusterV1alpha1().ClusterClaims().Create(ctx, newClaim, metav1.CreateOptions{})
 		if err != nil {
 			return fmt.Errorf("unable to create ClusterClaim: %v, %w", newClaim, err)
@@ -301,6 +304,9 @@ func createOrUpdateClusterClaim(ctx context.Context, clusterClient clusterclient
 			}
 		}
 		oldClaim.Spec = newClaim.Spec
+		if newClaim.Name == ClaimOpenshiftAPIServerURL {
+			klog.Infof("##### claim api server url is updated")
+		}
 		_, err := clusterClient.ClusterV1alpha1().ClusterClaims().Update(ctx, oldClaim, metav1.UpdateOptions{})
 		if err != nil {
 			return fmt.Errorf("unable to update ClusterClaim %q: %w", oldClaim.Name, err)
@@ -316,10 +322,12 @@ func cleanClusterClaims(ctx context.Context, clusterClient clusterclientset.Inte
 	for _, c := range expectClusterClaims {
 		expectSet.Insert(c.Name)
 	}
+	klog.Infof("#########expected claim: %#v #######", expectSet)
 	for _, c := range currentClusterClaims {
 		if expectSet.Has(c.Name) {
 			continue
 		}
+		klog.Infof("####### claim %v is deleted #####", c.Name)
 		err := clusterClient.ClusterV1alpha1().ClusterClaims().Delete(ctx, c.Name, metav1.DeleteOptions{})
 		if err != nil {
 			errs = append(errs, err)

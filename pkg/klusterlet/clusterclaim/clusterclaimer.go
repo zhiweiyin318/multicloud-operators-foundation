@@ -214,6 +214,8 @@ func (c *ClusterClaimer) GenerateExpectClusterClaims() ([]*clusterv1alpha1.Clust
 		}
 		if apiServerURL != "" {
 			claims = append(claims, newClusterClaim(ClaimOpenshiftAPIServerURL, apiServerURL))
+		} else {
+			klog.Infof("###### apiServerURL is empty")
 		}
 		controlPlaneTopology := c.getControlPlaneTopology()
 		if controlPlaneTopology != "" {
