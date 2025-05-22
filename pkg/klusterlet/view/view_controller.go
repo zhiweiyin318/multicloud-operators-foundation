@@ -32,6 +32,14 @@ const (
 	DefaultUpdateInterval = 30 * time.Second
 )
 
+type ListItem struct {
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
+}
+type ListResult struct {
+	Items []ListItem `json:"items"`
+}
+
 func (r *ViewReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("ManagedClusterView", req.NamespacedName)
 	updateInterval := DefaultUpdateInterval
@@ -76,17 +84,6 @@ func (r *ViewReconciler) queryResource(managedClusterView *viewv1beta1.ManagedCl
 	var err error
 	var gvr schema.GroupVersionResource
 	scope := managedClusterView.Spec.Scope
-
-	if scope.Name == "" {
-		err = fmt.Errorf("invalid resource name")
-		meta.SetStatusCondition(&managedClusterView.Status.Conditions, metav1.Condition{
-			Type:    viewv1beta1.ConditionViewProcessing,
-			Status:  metav1.ConditionFalse,
-			Reason:  viewv1beta1.ReasonResourceNameInvalid,
-			Message: fmt.Errorf("failed to get resource with err: %v", err).Error(),
-		})
-		return err
-	}
 
 	if scope.Resource == "" && (scope.Kind == "" || scope.Version == "") {
 		err = fmt.Errorf("invalid resource type")
@@ -136,14 +133,41 @@ func (r *ViewReconciler) queryResource(managedClusterView *viewv1beta1.ManagedCl
 		})
 		return nil
 	}
+	if scope.Name != "" {
+		obj, err = r.ManagedClusterDynamicClient.Resource(gvr).Namespace(scope.Namespace).Get(context.TODO(), scope.Name, metav1.GetOptions{})
+		if err != nil {
+			meta.SetStatusCondition(&managedClusterView.Status.Conditions, metav1.Condition{
+				Type:    viewv1beta1.ConditionViewProcessing,
+				Status:  metav1.ConditionFalse,
+				Reason:  viewv1beta1.ReasonGetResourceFailed,
+				Message: fmt.Errorf("failed to get resource with err: %v", err).Error(),
+			})
+			return err
+		}
 
-	obj, err = r.ManagedClusterDynamicClient.Resource(gvr).Namespace(scope.Namespace).Get(context.TODO(), scope.Name, metav1.GetOptions{})
+		meta.SetStatusCondition(&managedClusterView.Status.Conditions, metav1.Condition{
+			Type:    viewv1beta1.ConditionViewProcessing,
+			Reason:  viewv1beta1.ReasonGetResource,
+			Status:  metav1.ConditionTrue,
+			Message: "Watching resources successfully",
+		})
+		objRaw, _ := json.Marshal(obj)
+		if !bytes.Equal(managedClusterView.Status.Result.Raw, objRaw) {
+			managedClusterView.Status.Result = runtime.RawExtension{Raw: objRaw, Object: obj}
+		}
+
+		return nil
+	}
+
+	// list the resources
+
+	objList, err := r.ManagedClusterDynamicClient.Resource(gvr).Namespace(scope.Namespace).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		meta.SetStatusCondition(&managedClusterView.Status.Conditions, metav1.Condition{
 			Type:    viewv1beta1.ConditionViewProcessing,
 			Status:  metav1.ConditionFalse,
 			Reason:  viewv1beta1.ReasonGetResourceFailed,
-			Message: fmt.Errorf("failed to get resource with err: %v", err).Error(),
+			Message: fmt.Errorf("failed to list resource with err: %v", err).Error(),
 		})
 		return err
 	}
@@ -154,11 +178,15 @@ func (r *ViewReconciler) queryResource(managedClusterView *viewv1beta1.ManagedCl
 		Status:  metav1.ConditionTrue,
 		Message: "Watching resources successfully",
 	})
-
-	objRaw, _ := json.Marshal(obj)
+	listResult := ListResult{Items: []ListItem{}}
+	for _, obj := range objList.Items {
+		listResult.Items = append(listResult.Items, ListItem{Namespace: obj.GetNamespace(), Name: obj.GetName()})
+	}
+	objRaw, _ := json.Marshal(listResult)
 	if !bytes.Equal(managedClusterView.Status.Result.Raw, objRaw) {
 		managedClusterView.Status.Result = runtime.RawExtension{Raw: objRaw, Object: obj}
 	}
 
 	return nil
+
 }
